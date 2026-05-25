@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-schema",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "JSON Schema validation, Frontier profile generation, CloudEvent envelopes, and table-schema helpers.",
   "type": "module",
   "license": "MIT",
