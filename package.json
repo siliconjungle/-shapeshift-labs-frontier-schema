@@ -1,0 +1,46 @@
+{
+  "name": "@shapeshift-labs/frontier-schema",
+  "version": "0.0.1",
+  "description": "Reserved package name for the optional Frontier schema helpers.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/siliconjungle/-shapeshift-labs-frontier-schema.git"
+  },
+  "homepage": "https://github.com/siliconjungle/-shapeshift-labs-frontier-schema#readme",
+  "bugs": {
+    "url": "https://github.com/siliconjungle/-shapeshift-labs-frontier-schema/issues"
+  },
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node -e \"import('./index.js').catch((error) => { if (!String(error && error.message).includes('reserved placeholder')) process.exit(1); })\""
+  },
+  "keywords": [
+    "frontier",
+    "schema",
+    "json",
+    "diff",
+    "validation",
+    "reserved"
+  ]
+}
