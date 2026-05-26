@@ -52,9 +52,9 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@shapeshift-labs/frontier": "^0.1.5",
-    "@shapeshift-labs/frontier-engine": "^0.1.0",
-    "@shapeshift-labs/frontier-query": "^0.1.0"
+    "@shapeshift-labs/frontier": "0.1.8",
+    "@shapeshift-labs/frontier-engine": "0.1.1",
+    "@shapeshift-labs/frontier-query": "0.1.2"
   },
   "scripts": {
     "build": "node build.mjs",
