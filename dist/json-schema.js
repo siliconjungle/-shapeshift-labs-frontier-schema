@@ -16,6 +16,7 @@ const SUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
     'maxLength',
     'minimum',
     'maximum',
+    'multipleOf',
     'pattern'
 ]);
 const JSON_SCHEMA_TYPE_NAMES = new Set(['null', 'boolean', 'number', 'integer', 'string', 'array', 'object']);
@@ -101,7 +102,7 @@ export function jsonSchemaToFrontierSchema(schema, options = {}) {
 export function jsonSchemaToDiffProfile(schema, options = {}) {
     const frontierSchema = jsonSchemaToFrontierSchema(schema, options);
     const schemas = isMultiSchema(frontierSchema) ? frontierSchema.schemas : [frontierSchema];
-    return {
+    const profile = {
         version: 1,
         plans: {
             diff: {
@@ -114,6 +115,10 @@ export function jsonSchemaToDiffProfile(schema, options = {}) {
         schema: schemas.length === 1 ? schemas[0] : undefined,
         schemas: schemas.length > 1 ? schemas : undefined
     };
+    const quantization = collectJsonSchemaQuantizationRules(schema, options);
+    if (quantization !== undefined)
+        profile.settings = { quantization };
+    return profile;
 }
 function validateSchemaDefinition(value, path, issues, maxIssues, allowUnsupportedKeywords) {
     if (issues.length >= maxIssues)
@@ -223,6 +228,9 @@ function validateSchemaDefinition(value, path, issues, maxIssues, allowUnsupport
     validateFiniteNumberKeyword(schema.maximum, path.concat('maximum'), 'maximum', issues);
     if (issues.length >= maxIssues)
         return;
+    validatePositiveFiniteNumberKeyword(schema.multipleOf, path.concat('multipleOf'), 'multipleOf', issues);
+    if (issues.length >= maxIssues)
+        return;
     if (schema.pattern !== undefined) {
         if (typeof schema.pattern !== 'string') {
             addIssue(issues, path.concat('pattern'), 'pattern', 'schema pattern must be a string');
@@ -273,6 +281,9 @@ function validateAgainstSchema(value, schema, path, issues, maxIssues) {
             addIssue(issues, path, 'minimum', 'number is smaller than minimum');
         if (schema.maximum !== undefined && value > schema.maximum)
             addIssue(issues, path, 'maximum', 'number is greater than maximum');
+        if (schema.multipleOf !== undefined && !isMultipleOf(value, schema.multipleOf)) {
+            addIssue(issues, path, 'multipleOf', 'number is not a multiple of schema multipleOf');
+        }
         return;
     }
     if (Array.isArray(value)) {
@@ -339,6 +350,71 @@ function readSchemaFields(schema) {
     }
     return fields;
 }
+function collectJsonSchemaQuantizationRules(schema, options) {
+    const quantization = readJsonSchemaQuantizationOptions(options.quantization);
+    if (quantization === null)
+        return undefined;
+    const rules = [];
+    const basePath = options.path ? options.path.slice() : [];
+    if (schema.type === 'array' && schema.items) {
+        collectSchemaQuantizationRules(schema.items, basePath.concat('*'), quantization, rules);
+    }
+    else {
+        collectSchemaQuantizationRules(schema, basePath, quantization, rules);
+    }
+    return rules.length === 0 ? undefined : rules;
+}
+function readJsonSchemaQuantizationOptions(value) {
+    if (value === undefined || value === false)
+        return null;
+    if (value === true)
+        return {};
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        throw new TypeError('quantization option must be a boolean or object');
+    }
+    if (value.mode !== undefined && value.mode !== 'nearest' && value.mode !== 'floor' && value.mode !== 'ceil') {
+        throw new TypeError('quantization.mode must be "nearest", "floor", or "ceil"');
+    }
+    if (value.fixedStep !== undefined && typeof value.fixedStep !== 'boolean') {
+        throw new TypeError('quantization.fixedStep must be a boolean');
+    }
+    const out = {};
+    if (value.mode !== undefined)
+        out.mode = value.mode;
+    if (value.fixedStep !== undefined)
+        out.fixedStep = value.fixedStep;
+    return out;
+}
+function collectSchemaQuantizationRules(schema, path, options, rules) {
+    if (schema.multipleOf !== undefined && schemaAllowsNumeric(schema.type)) {
+        const rule = {
+            path: path.slice(),
+            step: schema.multipleOf
+        };
+        if (options.mode !== undefined)
+            rule.mode = options.mode;
+        if (options.fixedStep !== undefined)
+            rule.fixedStep = options.fixedStep;
+        rules[rules.length] = rule;
+    }
+    if (schema.properties !== undefined) {
+        const keys = Object.keys(schema.properties).sort();
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            collectSchemaQuantizationRules(schema.properties[key], path.concat(key), options, rules);
+        }
+    }
+    if (schema.items !== undefined) {
+        collectSchemaQuantizationRules(schema.items, path.concat('*'), options, rules);
+    }
+}
+function schemaAllowsNumeric(type) {
+    if (type === undefined)
+        return true;
+    if (Array.isArray(type))
+        return type.indexOf('number') !== -1 || type.indexOf('integer') !== -1;
+    return type === 'number' || type === 'integer';
+}
 function isMultiSchema(schema) {
     return Object.prototype.hasOwnProperty.call(schema, 'schemas');
 }
@@ -386,6 +462,15 @@ function validateFiniteNumberKeyword(value, path, keyword, issues) {
     if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
         addIssue(issues, path, keyword, 'schema ' + keyword + ' must be a finite number');
     }
+}
+function validatePositiveFiniteNumberKeyword(value, path, keyword, issues) {
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)) {
+        addIssue(issues, path, keyword, 'schema ' + keyword + ' must be a positive finite number');
+    }
+}
+function isMultipleOf(value, step) {
+    const quotient = value / step;
+    return Math.abs(quotient - Math.round(quotient)) <= 1e-9;
 }
 function readSchemaDefinitionOptions(value, fallbackMaxIssues) {
     if (value === undefined || value === false)

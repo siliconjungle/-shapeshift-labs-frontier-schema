@@ -9,6 +9,8 @@ import {
   jsonSchemaToDiffProfile,
   jsonSchemaToFrontierSchema,
   normalizeQuerySchema,
+  querySchemaToDiffProfile,
+  querySchemaToFrontierSchema,
   validateCloudEventEnvelope,
   validateJsonSchemaContract,
   validateJsonSchemaDefinition
@@ -20,7 +22,8 @@ import {
   createCloudEventEnvelope as createCloudEventEnvelopeSubpath
 } from '../dist/event.js';
 import {
-  normalizeQuerySchema as normalizeQuerySchemaSubpath
+  normalizeQuerySchema as normalizeQuerySchemaSubpath,
+  querySchemaToDiffProfile as querySchemaToDiffProfileSubpath
 } from '../dist/query.js';
 
 {
@@ -44,6 +47,23 @@ import {
   assert.strictEqual(extra.issues[0].keyword, 'additionalProperties');
   assert.throws(() => assertJsonSchemaContract({ id: '', score: -1 }, schema), /schema validation failed/);
   assert.strictEqual(validateJsonSchemaContract({ id: 'x', score: 1 }, schema, { strictSchema: true }).valid, true);
+}
+
+{
+  const schema = {
+    type: 'object',
+    properties: {
+      tick: { type: 'number', multipleOf: 0.1 }
+    }
+  };
+  assert.strictEqual(validateJsonSchemaContract({ tick: 0.3 }, schema).valid, true);
+  const result = validateJsonSchemaContract({ tick: 0.31 }, schema);
+  assert.strictEqual(result.valid, false);
+  assert.strictEqual(result.issues[0].keyword, 'multipleOf');
+  assert.throws(() => assertJsonSchemaDefinition({
+    type: 'object',
+    properties: { tick: { type: 'number', multipleOf: 0 } }
+  }), /multipleOf/);
 }
 
 {
@@ -109,6 +129,34 @@ import {
 }
 
 {
+  const schema = {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        score: { type: 'number', multipleOf: 0.25 }
+      }
+    }
+  };
+  const profile = jsonSchemaToDiffProfile(schema, {
+    path: ['rows'],
+    arrayKey: 'id',
+    quantization: { fixedStep: true }
+  });
+  assert.deepStrictEqual(profile.settings.quantization, [{
+    path: ['rows', '*', 'score'],
+    step: 0.25,
+    fixedStep: true
+  }]);
+  const engine = createDiffEngine({ profile });
+  assert.deepStrictEqual(
+    engine.diff({ rows: [{ id: 'a', score: 1.01 }] }, { rows: [{ id: 'a', score: 1.11 }] }),
+    []
+  );
+}
+
+{
   const event = createCloudEventEnvelope({
     id: 'evt-1',
     source: '/frontier/tests',
@@ -147,6 +195,35 @@ import {
   assert.deepStrictEqual(schema.tables[0].key, ['id']);
   assert.deepStrictEqual(schema.tables[0].selectorFields, [['done'], ['owner', 'id']]);
   assert.deepStrictEqual(normalizeQuerySchemaSubpath([{ path: '/users', key: 'id' }]).tables[0].path, ['users']);
+}
+
+{
+  const queryShape = {
+    tables: [{
+      path: '/todos',
+      key: 'id',
+      numericFields: ['count'],
+      textFields: ['owner.team'],
+      selectorFields: ['done', 'owner.id']
+    }]
+  };
+  assert.deepStrictEqual(querySchemaToFrontierSchema(queryShape), {
+    type: 'array',
+    path: ['todos'],
+    key: 'id',
+    item: {
+      type: 'object',
+      key: 'id',
+      fields: ['id', 'count', { key: 'owner', type: 'object', fields: ['team', 'id'] }, 'done']
+    }
+  });
+  const profile = querySchemaToDiffProfile(queryShape);
+  const quantizedProfile = querySchemaToDiffProfile(queryShape, {
+    quantization: [{ path: ['todos', '*', 'count'], step: 1 }]
+  });
+  assert.deepStrictEqual(quantizedProfile.settings.quantization, [{ path: ['todos', '*', 'count'], step: 1 }]);
+  assert.strictEqual(querySchemaToDiffProfileSubpath(queryShape).schema.path[0], 'todos');
+  assert.strictEqual(profile.schema.path[0], 'todos');
 }
 
 console.log('frontier-schema smoke tests passed');

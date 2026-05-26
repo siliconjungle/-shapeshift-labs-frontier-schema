@@ -10,6 +10,9 @@ This package is the authoring and conversion layer for schema-shaped Frontier wo
 
 ## Related Packages
 
+- [`@shapeshift-labs/frontier-state-cache-idb`](https://www.npmjs.com/package/@shapeshift-labs/frontier-state-cache-idb): IndexedDB persistence adapter for Frontier state-cache snapshots.
+- [`@shapeshift-labs/frontier-state-cache-file`](https://www.npmjs.com/package/@shapeshift-labs/frontier-state-cache-file): Structured file persistence adapter for Frontier state-cache snapshots and change logs.
+- [`@shapeshift-labs/frontier-state-cache-sql`](https://www.npmjs.com/package/@shapeshift-labs/frontier-state-cache-sql): SQL persistence adapter for Frontier state-cache snapshots and change logs.
 - [`@shapeshift-labs/frontier`](https://www.npmjs.com/package/@shapeshift-labs/frontier): core JSON diff/apply primitives.
 - [`@shapeshift-labs/frontier-query`](https://www.npmjs.com/package/@shapeshift-labs/frontier-query): shared query-key, selector path, condition, identity, and table-schema primitives.
 - [`@shapeshift-labs/frontier-codec`](https://www.npmjs.com/package/@shapeshift-labs/frontier-codec): patch serialization, binary frames, canonical JSON, and patch-history codecs.
@@ -20,6 +23,9 @@ This package is the authoring and conversion layer for schema-shaped Frontier wo
 
 Package source repositories:
 
+- [`siliconjungle/-shapeshift-labs-frontier-state-cache-idb`](https://github.com/siliconjungle/-shapeshift-labs-frontier-state-cache-idb)
+- [`siliconjungle/-shapeshift-labs-frontier-state-cache-file`](https://github.com/siliconjungle/-shapeshift-labs-frontier-state-cache-file)
+- [`siliconjungle/-shapeshift-labs-frontier-state-cache-sql`](https://github.com/siliconjungle/-shapeshift-labs-frontier-state-cache-sql)
 - [`siliconjungle/-shapeshift-labs-frontier`](https://github.com/siliconjungle/-shapeshift-labs-frontier)
 - [`siliconjungle/-shapeshift-labs-frontier-query`](https://github.com/siliconjungle/-shapeshift-labs-frontier-query)
 - [`siliconjungle/-shapeshift-labs-frontier-codec`](https://github.com/siliconjungle/-shapeshift-labs-frontier-codec)
@@ -106,12 +112,14 @@ import {
 - `assertJsonSchemaContract(value, schema, options?)` throws on contract failures.
 - `compileJsonSchemaValidator(schema, options?)` clones and reuses schema validation options.
 
-Supported keywords: `type`, `properties`, `required`, `items`, `additionalProperties`, `enum`, `const`, `minItems`, `maxItems`, `minLength`, `maxLength`, `minimum`, `maximum`, and `pattern`.
+Supported keywords: `type`, `properties`, `required`, `items`, `additionalProperties`, `enum`, `const`, `minItems`, `maxItems`, `minLength`, `maxLength`, `minimum`, `maximum`, `multipleOf`, and `pattern`.
 
 ### Frontier Profiles
 
 - `jsonSchemaToFrontierSchema(schema, options?)` converts object and array-of-object JSON Schema contracts into Frontier engine schema hints.
 - `jsonSchemaToDiffProfile(schema, options?)` returns a `DiffProfile` for `createDiffEngine({ profile })`.
+
+Pass `quantization: true` or `{ fixedStep: true }` to `jsonSchemaToDiffProfile()` to turn numeric `multipleOf` fields into optional engine quantization rules. This is profile metadata for deterministic/replay workloads; generic JSON validation and core diff semantics remain exact.
 
 Schema package output is declarative. Runtime diff planning and cache execution stay in `@shapeshift-labs/frontier-engine`.
 
@@ -175,15 +183,18 @@ Run the package-local benchmark:
 npm run bench
 ```
 
-Latest local package benchmark on Node v26.1.0, darwin arm64, 3 rounds:
+Latest local package benchmark on Node v26.1.0, darwin arm64, 15 rounds:
 
 | Fixture | Median | p95 |
 | --- | ---: | ---: |
-| JSON schema contract validate | 1.06 us | 1.24 us |
-| Compiled schema validator | 1.07 us | 1.13 us |
-| JSON schema to diff profile | 7.40 us | 7.55 us |
-| Query table schema normalize | 0.87 us | 0.92 us |
-| CloudEvent create and validate | 1.60 us | 1.90 us |
+| JSON schema contract validate | 0.99 us | 1.21 us |
+| Compiled schema validator | 0.95 us | 1.10 us |
+| JSON schema to diff profile | 6.89 us | 7.11 us |
+| JSON schema to quantized profile | 7.85 us | 8.29 us |
+| Query table schema normalize | 0.36 us | 0.63 us |
+| Query schema to diff profile | 0.67 us | 0.89 us |
+| Query schema to quantized profile | 0.71 us | 0.87 us |
+| CloudEvent create and validate | 0.99 us | 1.26 us |
 
 These are Frontier-only package measurements, not competitor comparisons.
 

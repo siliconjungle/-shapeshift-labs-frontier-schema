@@ -1,0 +1,50 @@
+{
+  "package": "@shapeshift-labs/frontier-schema",
+  "version": "0.1.1",
+  "generatedAt": "2026-05-26T08:46:30.909Z",
+  "node": "v26.1.0",
+  "platform": "darwin arm64",
+  "rounds": 15,
+  "rows": [
+    {
+      "fixture": "JSON schema contract validate",
+      "medianUs": 0.9855333999999999,
+      "p95Us": 1.2141666999999998
+    },
+    {
+      "fixture": "Compiled schema validator",
+      "medianUs": 0.9515375000000006,
+      "p95Us": 1.0956875000000026
+    },
+    {
+      "fixture": "JSON schema to diff profile",
+      "medianUs": 6.8938166999999915,
+      "p95Us": 7.106299999999998
+    },
+    {
+      "fixture": "JSON schema to quantized profile",
+      "medianUs": 7.849416699999984,
+      "p95Us": 8.287870899999984
+    },
+    {
+      "fixture": "Query table schema normalize",
+      "medianUs": 0.3553791999999703,
+      "p95Us": 0.6259874999999738
+    },
+    {
+      "fixture": "Query schema to diff profile",
+      "medianUs": 0.6670458000000054,
+      "p95Us": 0.887237499999992
+    },
+    {
+      "fixture": "Query schema to quantized profile",
+      "medianUs": 0.7131249999999909,
+      "p95Us": 0.8719458000000031
+    },
+    {
+      "fixture": "CloudEvent create and validate",
+      "medianUs": 0.9863000000000284,
+      "p95Us": 1.25646670000001
+    }
+  ]
+}

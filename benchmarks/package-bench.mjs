@@ -1,15 +1,22 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 import {
   compileJsonSchemaValidator,
   createCloudEventEnvelope,
   jsonSchemaToDiffProfile,
   normalizeQuerySchema,
+  querySchemaToDiffProfile,
   validateCloudEventEnvelope,
   validateJsonSchemaContract
 } from '../dist/index.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, '..');
 const args = parseArgs(process.argv.slice(2));
 const rounds = readPositiveInt(args.rounds, 3);
+const outPath = args.out ? path.resolve(rootDir, args.out) : null;
 
 const rowSchema = {
   type: 'object',
@@ -28,6 +35,13 @@ const rowSchema = {
     }
   }
 };
+const quantizedRowSchema = {
+  ...rowSchema,
+  properties: {
+    ...rowSchema.properties,
+    score: { type: 'number', minimum: 0, multipleOf: 0.25 }
+  }
+};
 const row = { id: 'row-1', score: 42, active: true, owner: { id: 'u1', team: 'core' } };
 const compiled = compileJsonSchemaValidator(rowSchema);
 const querySchema = {
@@ -40,7 +54,6 @@ const querySchema = {
     selectorFields: ['active', 'owner.id']
   }]
 };
-
 const fixtures = [
   {
     name: 'JSON schema contract validate',
@@ -64,10 +77,31 @@ const fixtures = [
     }
   },
   {
+    name: 'JSON schema to quantized profile',
+    iterations: 10000,
+    fn() {
+      jsonSchemaToDiffProfile(quantizedRowSchema, { path: ['rows'], arrayKey: 'id', quantization: { fixedStep: true } });
+    }
+  },
+  {
     name: 'Query table schema normalize',
     iterations: 10000,
     fn() {
       normalizeQuerySchema(querySchema);
+    }
+  },
+  {
+    name: 'Query schema to diff profile',
+    iterations: 10000,
+    fn() {
+      querySchemaToDiffProfile(querySchema);
+    }
+  },
+  {
+    name: 'Query schema to quantized profile',
+    iterations: 10000,
+    fn() {
+      querySchemaToDiffProfile(querySchema, { quantization: [{ path: ['rows', '*', 'score'], step: 0.25 }] });
     }
   },
   {
@@ -87,6 +121,19 @@ const fixtures = [
 ];
 
 const rows = fixtures.map((fixture) => measureFixture(fixture, rounds));
+const report = {
+  package: '@shapeshift-labs/frontier-schema',
+  version: readPackageVersion(),
+  generatedAt: new Date().toISOString(),
+  node: process.version,
+  platform: process.platform + ' ' + process.arch,
+  rounds,
+  rows
+};
+if (outPath !== null) {
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + '\n');
+}
 
 console.log('Frontier Schema package benchmark');
 console.log('node=' + process.version + ' platform=' + process.platform + ' arch=' + process.arch + ' rounds=' + rounds);
@@ -94,6 +141,7 @@ console.log(padRight('fixture', 36) + padLeft('median', 12) + padLeft('p95', 12)
 for (const row of rows) {
   console.log(padRight(row.fixture, 36) + padLeft(formatUs(row.medianUs), 12) + padLeft(formatUs(row.p95Us), 12));
 }
+if (outPath !== null) console.log('wrote ' + path.relative(rootDir, outPath));
 
 function measureFixture(fixture, rounds) {
   const samples = [];
@@ -118,6 +166,10 @@ function percentile(values, q) {
   return values[index];
 }
 
+function readPackageVersion() {
+  return JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8')).version;
+}
+
 function formatUs(value) {
   return value.toFixed(2) + ' us';
 }
@@ -137,8 +189,9 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--rounds') out.rounds = argv[++i];
+    else if (arg === '--out') out.out = argv[++i];
     else if (arg === '--help' || arg === '-h') {
-      console.log('Usage: node benchmarks/package-bench.mjs [--rounds 3]');
+      console.log('Usage: node benchmarks/package-bench.mjs [--rounds 3] [--out benchmarks/results/package-bench.json]');
       process.exit(0);
     } else {
       throw new Error('unknown argument: ' + arg);

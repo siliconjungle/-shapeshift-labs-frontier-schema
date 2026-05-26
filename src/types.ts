@@ -26,6 +26,16 @@ export type {
 
 export type JsonSchemaTypeName = 'null' | 'boolean' | 'number' | 'integer' | 'string' | 'array' | 'object';
 
+export type NumericQuantizationMode = 'nearest' | 'floor' | 'ceil';
+
+export interface NumericQuantizationRule {
+  path?: JsonPath;
+  step: number;
+  offset?: number;
+  mode?: NumericQuantizationMode;
+  fixedStep?: boolean;
+}
+
 export interface JsonSchemaContract {
   type?: JsonSchemaTypeName | JsonSchemaTypeName[];
   properties?: Record<string, JsonSchemaContract>;
@@ -40,6 +50,7 @@ export interface JsonSchemaContract {
   maxLength?: number;
   minimum?: number;
   maximum?: number;
+  multipleOf?: number;
   pattern?: string;
 }
 
@@ -75,6 +86,12 @@ export type CompiledSchemaValidator<T = unknown> = {
 export interface JsonSchemaProfileOptions {
   path?: JsonPath;
   arrayKey?: ObjectKey;
+  quantization?: boolean | JsonSchemaQuantizationOptions;
+}
+
+export interface JsonSchemaQuantizationOptions {
+  mode?: NumericQuantizationMode;
+  fixedStep?: boolean;
 }
 
 export interface CloudEventEnvelope<T extends JsonValue = JsonValue> extends JsonObject {

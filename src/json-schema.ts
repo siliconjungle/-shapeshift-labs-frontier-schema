@@ -14,7 +14,9 @@ import type {
   JsonSchemaContract,
   JsonSchemaDefinitionOptions,
   JsonSchemaProfileOptions,
+  JsonSchemaQuantizationOptions,
   JsonSchemaTypeName,
+  NumericQuantizationRule,
   SchemaValidationIssue,
   SchemaValidationOptions,
   SchemaValidationResult
@@ -35,6 +37,7 @@ const SUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
   'maxLength',
   'minimum',
   'maximum',
+  'multipleOf',
   'pattern'
 ]);
 
@@ -149,7 +152,7 @@ export function jsonSchemaToDiffProfile(
 ): DiffProfile {
   const frontierSchema = jsonSchemaToFrontierSchema(schema, options);
   const schemas = isMultiSchema(frontierSchema) ? frontierSchema.schemas : [frontierSchema];
-  return {
+  const profile: DiffProfile = {
     version: 1,
     plans: {
       diff: {
@@ -162,6 +165,9 @@ export function jsonSchemaToDiffProfile(
     schema: schemas.length === 1 ? schemas[0] : undefined,
     schemas: schemas.length > 1 ? schemas : undefined
   };
+  const quantization = collectJsonSchemaQuantizationRules(schema, options);
+  if (quantization !== undefined) profile.settings = { quantization } as DiffProfile['settings'];
+  return profile;
 }
 
 function validateSchemaDefinition(
@@ -264,6 +270,8 @@ function validateSchemaDefinition(
   if (issues.length >= maxIssues) return;
   validateFiniteNumberKeyword(schema.maximum, path.concat('maximum'), 'maximum', issues);
   if (issues.length >= maxIssues) return;
+  validatePositiveFiniteNumberKeyword(schema.multipleOf, path.concat('multipleOf'), 'multipleOf', issues);
+  if (issues.length >= maxIssues) return;
 
   if (schema.pattern !== undefined) {
     if (typeof schema.pattern !== 'string') {
@@ -314,6 +322,9 @@ function validateAgainstSchema(
   if (typeof value === 'number') {
     if (schema.minimum !== undefined && value < schema.minimum) addIssue(issues, path, 'minimum', 'number is smaller than minimum');
     if (schema.maximum !== undefined && value > schema.maximum) addIssue(issues, path, 'maximum', 'number is greater than maximum');
+    if (schema.multipleOf !== undefined && !isMultipleOf(value, schema.multipleOf)) {
+      addIssue(issues, path, 'multipleOf', 'number is not a multiple of schema multipleOf');
+    }
     return;
   }
 
@@ -379,6 +390,76 @@ function readSchemaFields(schema: JsonSchemaContract): SchemaField[] {
   return fields;
 }
 
+function collectJsonSchemaQuantizationRules(
+  schema: JsonSchemaContract,
+  options: JsonSchemaProfileOptions
+): NumericQuantizationRule[] | undefined {
+  const quantization = readJsonSchemaQuantizationOptions(options.quantization);
+  if (quantization === null) return undefined;
+  const rules: NumericQuantizationRule[] = [];
+  const basePath = options.path ? options.path.slice() : [];
+  if (schema.type === 'array' && schema.items) {
+    collectSchemaQuantizationRules(schema.items, basePath.concat('*'), quantization, rules);
+  } else {
+    collectSchemaQuantizationRules(schema, basePath, quantization, rules);
+  }
+  return rules.length === 0 ? undefined : rules;
+}
+
+function readJsonSchemaQuantizationOptions(
+  value: JsonSchemaProfileOptions['quantization']
+): JsonSchemaQuantizationOptions | null {
+  if (value === undefined || value === false) return null;
+  if (value === true) return {};
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('quantization option must be a boolean or object');
+  }
+  if (value.mode !== undefined && value.mode !== 'nearest' && value.mode !== 'floor' && value.mode !== 'ceil') {
+    throw new TypeError('quantization.mode must be "nearest", "floor", or "ceil"');
+  }
+  if (value.fixedStep !== undefined && typeof value.fixedStep !== 'boolean') {
+    throw new TypeError('quantization.fixedStep must be a boolean');
+  }
+  const out: JsonSchemaQuantizationOptions = {};
+  if (value.mode !== undefined) out.mode = value.mode;
+  if (value.fixedStep !== undefined) out.fixedStep = value.fixedStep;
+  return out;
+}
+
+function collectSchemaQuantizationRules(
+  schema: JsonSchemaContract,
+  path: JsonPath,
+  options: JsonSchemaQuantizationOptions,
+  rules: NumericQuantizationRule[]
+): void {
+  if (schema.multipleOf !== undefined && schemaAllowsNumeric(schema.type)) {
+    const rule: NumericQuantizationRule = {
+      path: path.slice(),
+      step: schema.multipleOf
+    };
+    if (options.mode !== undefined) rule.mode = options.mode;
+    if (options.fixedStep !== undefined) rule.fixedStep = options.fixedStep;
+    rules[rules.length] = rule;
+  }
+
+  if (schema.properties !== undefined) {
+    const keys = Object.keys(schema.properties).sort();
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      collectSchemaQuantizationRules(schema.properties[key], path.concat(key), options, rules);
+    }
+  }
+  if (schema.items !== undefined) {
+    collectSchemaQuantizationRules(schema.items, path.concat('*'), options, rules);
+  }
+}
+
+function schemaAllowsNumeric(type: JsonSchemaContract['type']): boolean {
+  if (type === undefined) return true;
+  if (Array.isArray(type)) return type.indexOf('number') !== -1 || type.indexOf('integer') !== -1;
+  return type === 'number' || type === 'integer';
+}
+
 function isMultiSchema(schema: Schema): schema is { schemas: SingleSchema[] } {
   return Object.prototype.hasOwnProperty.call(schema, 'schemas');
 }
@@ -437,6 +518,22 @@ function validateFiniteNumberKeyword(
   if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
     addIssue(issues, path, keyword, 'schema ' + keyword + ' must be a finite number');
   }
+}
+
+function validatePositiveFiniteNumberKeyword(
+  value: unknown,
+  path: JsonPath,
+  keyword: string,
+  issues: SchemaValidationIssue[]
+): void {
+  if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)) {
+    addIssue(issues, path, keyword, 'schema ' + keyword + ' must be a positive finite number');
+  }
+}
+
+function isMultipleOf(value: number, step: number): boolean {
+  const quotient = value / step;
+  return Math.abs(quotient - Math.round(quotient)) <= 1e-9;
 }
 
 function readSchemaDefinitionOptions(

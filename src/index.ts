@@ -13,7 +13,9 @@ export {
   validateCloudEventEnvelope
 } from './event.js';
 export {
-  normalizeQuerySchema
+  normalizeQuerySchema,
+  querySchemaToDiffProfile,
+  querySchemaToFrontierSchema
 } from './query.js';
 
 export type {
@@ -26,9 +28,12 @@ export type {
   JsonSchemaContract,
   JsonSchemaDefinitionOptions,
   JsonSchemaProfileOptions,
+  JsonSchemaQuantizationOptions,
   JsonSchemaTypeName,
   JsonValidationOptions,
   JsonValue,
+  NumericQuantizationMode,
+  NumericQuantizationRule,
   ObjectKey,
   Schema,
   SchemaField,
@@ -40,6 +45,7 @@ export type {
 export type {
   NormalizedQuerySchema,
   NormalizedQueryTableSchema,
+  QuerySchemaProfileOptions,
   QuerySchemaInput,
   QueryShapeSchema,
   QueryTableSchema
